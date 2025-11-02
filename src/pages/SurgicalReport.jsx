@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -198,6 +197,9 @@ const procedureTemplates = {
 6. [Detalhar o fechamento].`,
 };
 
+const GEMINI_API_KEY = "AIzaSyABNdwdC6yQtxRWrk2m7EPsmRXAUpZVpJ4";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`;
+
 export default function SurgicalReport() {
   const [notification, setNotification] = useState(null);
   const [selectedProcedure, setSelectedProcedure] = useState("");
@@ -348,21 +350,53 @@ Gere a saída completa do relatório, sem introduções ou explicações adicion
       fios_especiais: fiosEspeciais ? (descFios || "Não especificado") : "Não utilizado",
     };
     
-    const prompt = createGeminiPrompt(data);
+    const userPrompt = createGeminiPrompt(data);
     
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: prompt,
-      add_context_from_internet: false,
-    });
+    const payload = {
+      contents: [{ parts: [{ text: userPrompt }] }],
+      systemInstruction: {
+        parts: [{ text: "Você é um assistente médico que gera relatórios cirúrgicos concisos." }]
+      },
+    };
+
+    // Implementação com retentativas (Exponential Backoff)
+    const maxRetries = 3;
+    let lastError = null;
     
-    if (result && result.output) {
-      setReportOutput(result.output);
-      showNotification("✅ Relatório Gerado com Sucesso!");
-    } else {
-      setReportOutput("❌ Erro: A IA não retornou um relatório válido. Verifique os dados fornecidos.");
-      showNotification("Erro na Geração. Tente novamente.", "error");
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await fetch(GEMINI_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const generatedText = result.candidates?.[0]?.content?.parts?.[0]?.text || 
+                              'Erro: A IA não retornou um relatório válido. Verifique os dados fornecidos.';
+        
+        setReportOutput(generatedText);
+        showNotification("✅ Relatório Gerado com Sucesso!");
+        setIsGenerating(false);
+        return; // Sucesso, sai da função
+        
+      } catch (error) {
+        lastError = error;
+        console.error(`Tentativa ${attempt + 1} falhou:`, error);
+        if (attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000 + (Math.random() * 1000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
     
+    // Se todas as tentativas falharem
+    setReportOutput(`❌ Falha na Geração: Não foi possível obter o relatório após ${maxRetries} tentativas. Verifique a conexão ou os logs. Último erro: ${lastError.message}`);
+    showNotification("❌ Falha na Geração. Por favor, tente novamente.", "error");
     setIsGenerating(false);
   };
 
