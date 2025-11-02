@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,9 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { RotateCw, Copy, Trash2, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { Toaster } from "@/components/ui/toaster";
+import { RotateCw, Copy, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const generalSurgeryProcedures = [
   "Apendicectomia",
@@ -200,7 +199,7 @@ const procedureTemplates = {
 };
 
 export default function SurgicalReport() {
-  const { toast } = useToast();
+  const [notification, setNotification] = useState(null);
   const [selectedProcedure, setSelectedProcedure] = useState("");
   const [showDynamicFields, setShowDynamicFields] = useState(false);
   
@@ -226,6 +225,11 @@ export default function SurgicalReport() {
   // Report output
   const [reportOutput, setReportOutput] = useState("O relatório gerado pela IA aparecerá aqui.");
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const showNotification = (message, type = "success") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   const handleProcedureChange = (value) => {
     setSelectedProcedure(value);
@@ -257,16 +261,9 @@ export default function SurgicalReport() {
       setPatologias(possibleFindingsTemplates[selectedProcedure] || possibleFindingsTemplates["Padrão"]);
       setIncisao(incisionTemplates[selectedProcedure] || incisionTemplates["Padrão"]);
       
-      toast({
-        title: "Templates Recarregados",
-        description: `Template de "${selectedProcedure}", Achados e Incisão recarregados!`,
-      });
+      showNotification(`Template de "${selectedProcedure}", Achados e Incisão recarregados!`);
     } else {
-      toast({
-        title: "Atenção",
-        description: "Selecione um procedimento (item 1) primeiro.",
-        variant: "destructive",
-      });
+      showNotification("Selecione um procedimento (item 1) primeiro.", "error");
     }
   };
 
@@ -288,10 +285,7 @@ export default function SurgicalReport() {
     setDescFios("");
     setReportOutput("O relatório gerado pela IA aparecerá aqui.");
     
-    toast({
-      title: "📝 Formulário Limpo",
-      description: "Pronto para o próximo relatório.",
-    });
+    showNotification("📝 Formulário Limpo! Pronto para o próximo relatório.");
   };
 
   const createGeminiPrompt = (data) => {
@@ -333,11 +327,7 @@ Gere a saída completa do relatório, sem introduções ou explicações adicion
     e.preventDefault();
     
     if (!selectedProcedure) {
-      toast({
-        title: "Erro",
-        description: "Selecione um procedimento primeiro.",
-        variant: "destructive",
-      });
+      showNotification("Selecione um procedimento primeiro.", "error");
       return;
     }
     
@@ -367,17 +357,10 @@ Gere a saída completa do relatório, sem introduções ou explicações adicion
     
     if (result && result.output) {
       setReportOutput(result.output);
-      toast({
-        title: "✅ Relatório Gerado",
-        description: "Relatório pronto para cópia!",
-      });
+      showNotification("✅ Relatório Gerado com Sucesso!");
     } else {
       setReportOutput("❌ Erro: A IA não retornou um relatório válido. Verifique os dados fornecidos.");
-      toast({
-        title: "Erro na Geração",
-        description: "Não foi possível gerar o relatório. Tente novamente.",
-        variant: "destructive",
-      });
+      showNotification("Erro na Geração. Tente novamente.", "error");
     }
     
     setIsGenerating(false);
@@ -385,31 +368,30 @@ Gere a saída completa do relatório, sem introduções ou explicações adicion
 
   const handleCopyReport = () => {
     if (reportOutput.includes("O relatório gerado pela IA")) {
-      toast({
-        title: "Atenção",
-        description: "Gere um relatório primeiro para poder copiar!",
-        variant: "destructive",
-      });
+      showNotification("Gere um relatório primeiro para poder copiar!", "error");
       return;
     }
     
     navigator.clipboard.writeText(reportOutput).then(() => {
-      toast({
-        title: "📋 Copiado!",
-        description: "Relatório copiado para a área de transferência!",
-      });
+      showNotification("📋 Relatório copiado para a área de transferência!");
     }).catch(() => {
-      toast({
-        title: "Erro",
-        description: "Erro ao copiar. Por favor, selecione e copie manualmente.",
-        variant: "destructive",
-      });
+      showNotification("Erro ao copiar. Por favor, selecione e copie manualmente.", "error");
     });
   };
 
   return (
     <div className="min-h-screen p-4 sm:p-8" style={{ backgroundColor: '#f7f9fb', fontFamily: 'Inter, sans-serif' }}>
-      <Toaster />
+      {/* Notification */}
+      {notification && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-4">
+          <Alert className={notification.type === "error" ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}>
+            <AlertDescription className={notification.type === "error" ? "text-red-800" : "text-green-800"}>
+              {notification.message}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl p-6 sm:p-10">
         <header className="mb-8 border-b pb-4">
           <h1 className="text-3xl font-extrabold text-blue-800">
